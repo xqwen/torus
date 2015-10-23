@@ -1,1 +1,4 @@
-# torus -- Q**T**L Disc**o**ve**r**y **u**sing Annotation**s**
+# torus - QTL Discovery utilizing Genomic Annotations 
+
+
+torus is a free software package that implements a computational procedure for discovering molecular QTLs incorporating genomic annotations. 
