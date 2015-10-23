@@ -1,2 +1,1 @@
-# torus
-qTl dicOveRy Using annotationS
+# torus -- qTl dicOveRy Using annotationS
