@@ -33,8 +33,8 @@ With both files specified, torus will control for SNP distance to transcript sta
 
 
 * ``-est``: output the estimates of enrichment parameters and their confidence intervals
-*``-qtl``: perform Bayesian FDR control, and output the result
-*``-dump_prior``: compute SNP-level priors using the estimated enrichment estimates for each locus
+* ``-qtl``: perform Bayesian FDR control, and output the result
+* ``-dump_prior``: compute SNP-level priors using the estimated enrichment estimates for each locus
 
 
 ## Sample files
