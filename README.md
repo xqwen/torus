@@ -39,5 +39,5 @@ With both files specified, torus will control for SNP distance to transcript sta
 
 ## Sample files
 
-* The example files from the GEUVDAIS project (data_file, snp_map and gene_map) can be found in [here](https://github.com/xqwen/torus/tree/master/sample_data/GEUVADIS). Note the input data file is using format 2 with pre-computed Bayes factors.
+* The example files from the GEUVDAIS project (data_file, snp_map and gene_map) can be found in [here](https://github.com/xqwen/torus/tree/master/sample_data/GEUVADIS). Note the input data file is using format 2 with pre-computed Bayes factors in a meta-analytic setting.
 
