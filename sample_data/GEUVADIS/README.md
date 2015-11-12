@@ -1,4 +1,4 @@
-# eGene Discovery in GEUVADIS Data -- A Tutorial
+# Tutorial: Analysis of GEUVADIS Data 
 
 In this tutorial, we go through the process of eGene discovery using the real GEUVADIS data. The data set contains multi-population eQTL data and is originally distributed from [this website](http://www.ebi.ac.uk/arrayexpress/files/E-GEUV-1/analysis_results/). We performed additional pre-processing steps that are documented in [Wen et al, 2015](http://journals.plos.org/plosgenetics/article?id=10.1371/journal.pgen.1005176). 
 
