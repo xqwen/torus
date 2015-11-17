@@ -102,7 +102,7 @@ The results for QTL discovery is directly output to the screen, and can be re-di
 4    ENSG00000164308.12    3.318e-182    1
 5     ENSG00000233927.4    1.774e-164    1
 ```
-The output is a ranked list of all tested loci. The first and the second columns represent the rank and the name of a gene, respectively. Column 3 represents the false discovery probability of the corresponding gene (smaller value indicates that the locus likely to harbor QTNs). Finally, column 5 represents a indicator for the hypothesis testing outcome: 1 indicates rejection of null at 5% FDR level.
+The output is a ranked list of all tested loci. The first and the second columns represent the rank and the name of a gene, respectively. Column 3 represents the false discovery probability of the corresponding gene (smaller value indicates that the locus likely to harbor QTNs). Finally, column 5 represents a indicator for the hypothesis testing outcome: 1 indicates rejection of the null hypothesis at 5% FDR level.
 
   
 
