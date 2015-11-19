@@ -41,3 +41,9 @@ With both files specified, torus will control for SNP distance to transcript sta
 
 We provide two real data tutorials to illustrate the usage of ```torus``` for QTL discovery. They eQTL data from the GEUVADIS project and the GTEx liver tissue. The tutorials can be found in the [```examples```] (https://github.com/xqwen/torus/tree/master/examples/) directory. 
 
+
+## Reference and citation
+
+* Wen, X. Effective QTL Discovery Incorporating Genomic Annotations. doi:10.1101/032003.
+
+
