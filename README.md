@@ -37,7 +37,7 @@ With both files specified, torus will control for SNP distance to transcript sta
 * ``-dump_prior``: compute SNP-level priors using the estimated enrichment estimates for each locus
 
 
-## Sample files
+## Tutorials and Sample files
 
-* The example files from the GEUVDAIS project (data_file, snp_map and gene_map) and a tutorial can be found [here](https://github.com/xqwen/torus/tree/master/examples/GEUVADIS). Note the input data file is using format 2 with pre-computed Bayes factors in a meta-analytic setting.
+We provide two real data tutorials to illustrate the usage of ```torus``` for QTL discovery. They eQTL data from the GEUVADIS project and the GTEx liver tissue. The tutorials can be found in the [```examples```] (https://github.com/xqwen/torus/tree/master/examples/) directory. 
 
