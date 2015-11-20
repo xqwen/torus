@@ -44,6 +44,6 @@ We provide two real data tutorials to illustrate the usage of ```torus``` for QT
 
 ## Reference and citation
 
-* Wen, X. Effective QTL Discovery Incorporating Genomic Annotations. doi:10.1101/032003.
+* Wen, X. Effective QTL Discovery Incorporating Genomic Annotations. *bioRxiv* doi:10.1101/032003.
 
 
