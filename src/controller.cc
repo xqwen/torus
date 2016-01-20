@@ -108,6 +108,100 @@ void controller::load_data(char *filename){
 }
 
 
+void controller::load_data_zscore(char *filename){
+
+  
+
+  ifstream dfile(filename, ios_base::in | ios_base::binary);
+  boost::iostreams::filtering_istream in;
+
+  in.push(boost::iostreams::gzip_decompressor());
+  in.push(dfile);
+  
+ 
+  string line;
+  istringstream ins;
+
+  string curr_loc_id = "";
+
+  vector<SNP> snp_vec;
+  string loc_id;
+  string snp_id;
+  double z_val;
+  int index_count = 0;
+  int loc_count = 0;
+  while(getline(in,line)){
+
+    ins.clear();
+    ins.str(line);
+
+    if(ins>>snp_id>>loc_id>>z_val){
+
+      if(curr_loc_id != loc_id){
+	if(curr_loc_id != ""){
+	  
+	  if(loc_hash.find(curr_loc_id)== loc_hash.end()){
+	    Locus loc(curr_loc_id, snp_vec);
+	    int pos = loc_hash.size();
+	    loc_hash[curr_loc_id] = pos;
+	    locVec.push_back(loc);	  
+	    loc_count++;
+	  }else{
+	    // already defined, concate the existing snpVec
+	    int pos = loc_hash[curr_loc_id];
+	    for(int i=0;i<snp_vec.size();i++){
+	      locVec[pos].snpVec.push_back(snp_vec[i]);
+	    }	   
+	  }
+	  
+	  snp_vec.clear();
+	
+	}
+	curr_loc_id = loc_id;
+   
+      }
+      
+      double log10_BF = compute_log10_BF(z_val);
+      //printf("%15s   %7.3f\n", snp_id.c_str(), log10_BF);
+      SNP snp(snp_id, log10_BF, index_count);
+      index_count++;
+      snp_hash[snp_id] = 100;
+      snp_vec.push_back(snp);
+      
+    }
+  }
+   
+  dfile.close();
+
+  if(loc_hash.find(curr_loc_id)== loc_hash.end()){
+    Locus loc(curr_loc_id, snp_vec);
+    int pos = loc_hash.size();
+    loc_hash[curr_loc_id] = pos;
+    locVec.push_back(loc);
+    loc_count++;
+  }else{
+    // already defined, concate the existing snpVec                                               
+    int pos = loc_hash[curr_loc_id];
+    for(int i=0;i<snp_vec.size();i++){
+      locVec[pos].snpVec.push_back(snp_vec[i]);
+    }
+  }
+  
+  
+ 
+  p = index_count;
+
+  fprintf(stderr, "Read in %d loci, %d locus-SNP pairs ... \n",loc_count, p);
+  
+  prior_vec = gsl_vector_calloc(p);
+
+}
+
+
+
+
+
+
 // this function directly loads pre-computed log10 Bayes factors
 
 void controller::load_data_BF(char *filename){
@@ -207,6 +301,7 @@ void controller::load_data_BF(char *filename){
 
 void controller::load_map(char* gene_file, char *snp_file){
 
+  dist_bin = 0;
   if(strlen(gene_file)==0 || strlen(snp_file)==0){
     return;
   }
@@ -321,7 +416,7 @@ void controller::load_annotation(char* annot_file){
   map<int, int> col2cpos;
   map<int, int> col2dpos;
   int col_count = -1;
-
+  
 
   if(strlen(annot_file)>0){
  
@@ -408,13 +503,14 @@ void controller::load_annotation(char* annot_file){
       double val;
       vector<double> avec;
       while(ins>>val){
-	avec.push_back(val);
+	avec.push_back(val);	
       }
       annot_map[snp] = avec;
-      
     }
   }
   
+
+
 
   // memory allocation
 
@@ -446,7 +542,7 @@ void controller::load_annotation(char* annot_file){
    
 
 	for(int k=0;k<avec.size();k++){
-	
+	  
 	  if(col2cat[k] == 1){
 	    gsl_matrix_set(Xc,index,col2cpos[k],avec[k]);
 	  }else{
@@ -473,7 +569,8 @@ void controller::load_annotation(char* annot_file){
     kd++;
   }
   
-  gsl_vector_int_free(dist_bin);
+  if(dist_bin != 0)
+    gsl_vector_int_free(dist_bin);
 }
 
 
@@ -544,6 +641,10 @@ void controller::run_EM(){
     }
     
   }
+
+  for(int i=0;i<cvar_name_vec.size();i++){
+    fprintf(stderr, "%s\t", cvar_name_vec[i].c_str());
+  }
     
   fprintf(stderr,"\n");
   while(1){
@@ -557,43 +658,33 @@ void controller::run_EM(){
       locVec[i].EM_update();
       curr_log10_lik += locVec[i].log10_lik;
       
-      /*
-      for(int j=0;j<locVec[i].snpVec.size();j++){
-	int index = locVec[i].snpVec[j].index;
-	printf("%s %f  ", locVec[i].snpVec[j].id.c_str(), gsl_vector_get(pip_vec,index));                                                          
-	for(int k=0;k<kd;k++){                                                                              
-	  printf("%d ", gsl_matrix_int_get(Xd,index,k));                                                        
-	  }                                                                                                   
-	printf("\n"); 
-	}
-      */
-      
+         
     }
     
     
-
-
-    /*
-    for(int i=0;i<p;i++){
-      printf("%f  ", gsl_vector_get(pip_vec,i));
-      for(int j=0;j<kd;j++){
-	printf("%d ", gsl_matrix_int_get(Xd,i,j));
-      }
-      printf("\n");
-      
-
-    }
-    */
-    
-
 
     if(ncoef==1){
       simple_regression();
-    }else if(kc==0 && kd == 1 && !force_logistic){
-      single_ct_regression();
-    }else{
-      logistic_fit(beta_vec, Xd, dlevel, pip_vec, 0,0);
-      logistic_pred(beta_vec,Xd, dlevel, prior_vec);
+    }
+    // only categrical annotations
+    else if(kc==0 && kd!=0){
+      if(kd == 1 && !force_logistic){
+	single_ct_regression();
+      }else{
+	logistic_cat_fit(beta_vec, Xd, dlevel,pip_vec, 0,0);
+      }
+      
+      logistic_cat_pred(beta_vec, Xd, dlevel,prior_vec);
+    }
+    // only continuous annotations
+    else if(kc!=0 && kd==0){
+      logistic_cont_fit(beta_vec, Xc, pip_vec,0,0);
+      logistic_cont_pred(beta_vec,Xc, prior_vec);
+    }
+    // both continuous and categorical annotations
+    else if(kc!=0 && kd !=0){
+      logistic_mixed_fit(beta_vec, Xd, dlevel, Xc, pip_vec, 0,0);
+      logistic_mixed_pred(beta_vec,Xd, dlevel, Xc, prior_vec);
     }
 
     //printf("%f   %f\n%f   %f\n",ct_00, ct_01, ct_10, ct_11);
@@ -725,9 +816,44 @@ void controller::estimate(){
   gsl_vector_memcpy(saved_beta_vec, beta_vec);  
   gsl_vector_memcpy(saved_prior_vec, prior_vec);
   
-
   
+
+  // CI for the intercept term
+  double est = gsl_vector_get(beta_vec, 0);
+  gsl_vector_set(beta_vec,0, 0.0);
+
+  if(kc==0 && kd!=0){
+    logistic_cat_pred(beta_vec, Xd, dlevel,prior_vec);
+  }
+  if(kc!=0 && kd==0){
+    logistic_cont_pred(beta_vec,Xc, prior_vec);
+  }
+  if(kc!=0 && kd !=0){
+    logistic_mixed_pred(beta_vec,Xd, dlevel, Xc, prior_vec);
+  }
+  
+  double null_log10_lik = 0;
+  for(int k=0;k<locVec.size();k++){
+    locVec[k].EM_update();
+    null_log10_lik += locVec[k].log10_lik;
+  }
+  double diff = (final_log10_lik - null_log10_lik)/log10(exp(1));
+  if(diff<1e-8){
+    diff = 1e-8;
+  }
+  double sd = fabs(est)/sqrt(2*diff);
+  printf("%25s  %9.3f     %9.3f  %9.3f\n", "Intercept", est, est-1.96*sd, est+1.96*sd);
+  gsl_vector_memcpy(beta_vec, saved_beta_vec);
+  gsl_vector_memcpy(prior_vec, saved_prior_vec);
+
+
+
+
+
   int index = 1; //start with 1, 0 always intercept
+  
+  
+  
   for(int i=0;i<dvar_name_vec.size();i++){
     
     int level = gsl_vector_int_get(dlevel,i);
@@ -742,7 +868,17 @@ void controller::estimate(){
       string label = stream.str();
       double est = gsl_vector_get(beta_vec, index);
       gsl_vector_set(beta_vec,index, 0.0);
-      logistic_pred(beta_vec, Xd, dlevel, prior_vec);
+
+      if(kc==0 && kd!=0){
+	logistic_cat_pred(beta_vec, Xd, dlevel,prior_vec);
+      }
+      if(kc!=0 && kd==0){
+	logistic_cont_pred(beta_vec,Xc, prior_vec);
+      }
+      if(kc!=0 && kd !=0){
+	logistic_mixed_pred(beta_vec,Xd, dlevel, Xc, prior_vec);
+      }
+
       double null_log10_lik = 0;
       for(int k=0;k<locVec.size();k++){
 	locVec[k].EM_update();
@@ -760,6 +896,38 @@ void controller::estimate(){
       gsl_vector_memcpy(prior_vec, saved_prior_vec);
     }
   }
+  
+  
+  for(int i=0;i<cvar_name_vec.size();i++){
+    string label =  cvar_name_vec[i];
+    double est = gsl_vector_get(beta_vec, index);
+    gsl_vector_set(beta_vec,index, 0.0);
+  
+    
+    if(kc==0 && kd!=0){
+      logistic_cat_pred(beta_vec, Xd, dlevel,prior_vec);
+    }
+    if(kc!=0 && kd==0){
+      logistic_cont_pred(beta_vec,Xc, prior_vec);
+    }
+    if(kc!=0 && kd !=0){
+      logistic_mixed_pred(beta_vec,Xd, dlevel, Xc, prior_vec);
+    }
+    
+    double null_log10_lik = 0;
+    for(int k=0;k<locVec.size();k++){
+      locVec[k].EM_update();
+      null_log10_lik += locVec[k].log10_lik;
+    }
+    double diff = (final_log10_lik - null_log10_lik)/log10(exp(1));
+    if(diff<1e-8){
+      diff = 1e-8;
+    }
+    double sd = fabs(est)/sqrt(2*diff);
+    printf("%25s  %9.3f     %9.3f  %9.3f\n", label.c_str(), est, est-1.96*sd, est+1.96*sd);
+    index++;
+  }
+  
   
   // restore all
   for(int k=0;k<locVec.size();k++){
@@ -825,13 +993,17 @@ void Locus::EM_update(){
   vector<double> BF_vec;
   vector<double> p_vec;
   
-  double locus_pi0 = 1;
   
+  double locus_pi0 = 1;
   for(int i=0;i<snpVec.size();i++){
     double prior = gsl_vector_get(prior_vec, snpVec[i].index);
     BF_vec.push_back(snpVec[i].log10_BF);
     p_vec.push_back(prior/(1-prior));
     locus_pi0 *= (1-prior);
+  }
+
+  if(locus_pi0 < 1e-100){
+    locus_pi0 = 1e-100;
   }
   
   for(int i=0;i<snpVec.size();i++){
@@ -840,7 +1012,12 @@ void Locus::EM_update(){
   
   BF_vec.push_back(0);
   p_vec.push_back(locus_pi0);
-  
+
+  /*
+  for(int i=0;i<p_vec.size();i++){
+    printf("%d  %7.3e\n",i, p_vec[i]);
+  }
+  */
 
   log10_lik = log10_weighted_sum(BF_vec, p_vec);
   
@@ -888,13 +1065,6 @@ void Locus::compute_fdr(){
 
 
 
-
-
-
-
-
-
-
 double compute_log10_BF(double beta, double se_beta){
 
   if(se_beta == 0)
@@ -910,6 +1080,24 @@ double compute_log10_BF(double beta, double se_beta){
     //double w2 = pow(se_beta*phi[i],2.0);
     double w2 = pow(phi[i],2.0);
     double val = 0.5*log(v2/(v2+w2)) + 0.5*z2*(w2/(v2+w2));
+    rstv.push_back(val/log(10));
+  }
+
+  return log10_weighted_sum(rstv,wtv);
+}
+
+
+double compute_log10_BF(double z_score){
+  
+  double kv[4] = {1, 5, 10, 20};
+  int size = 4;
+  double z2 = pow(z_score, 2.0);
+  vector<double> rstv;
+  vector<double> wtv(size,1.0/double(size));
+  for(int i=0;i<size;i++){
+    //double w2 = pow(se_beta*phi[i],2.0);
+    //double w2 = pow(phi[i],2.0);
+    double val = 0.5*log(1/(1+kv[i])) + 0.5*z2*(kv[i]/(1+kv[i]));
     rstv.push_back(val/log(10));
   }
 

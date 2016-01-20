@@ -135,6 +135,7 @@ class controller {
 
 
   void load_data(char *filename);    // load data with MatrixeQTL format -- default
+  void load_data_zscore(char *filename); // load data with z-score/t-score
   void load_data_BF(char *filename); // load data with pre-computed log10 Bayes factors
 
   void load_map(char *gene_map_file, char *snp_map_file);
@@ -163,6 +164,7 @@ class controller {
 
 double log10_weighted_sum(vector<double> & val_vec, vector<double> & wts_vec);
 double compute_log10_BF(double beta, double se_beta);
+double compute_log10_BF(double z_score);
 bool   rank_by_fdr (const Locus & loc1 , const Locus & loc2);
   
 int classify_dist_bin(int snp_pos, int tss, double bin_size = -1);

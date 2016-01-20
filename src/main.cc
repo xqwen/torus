@@ -7,7 +7,7 @@
 void show_banner(){
 
   fprintf(stderr, "\n\nTORUS: QTL Discovery Utilizing Genomic Annotations\n\n");
-  fprintf(stderr, "Usage: torus -est|qtl|dump_prior  -d input_data.gz [-smap snp_map.gz] [-gmap gene_map.gz] [-annot annotation_file.gz] [--load_bf]\n\n");
+  fprintf(stderr, "Usage: torus -est|qtl|dump_prior  -d input_data.gz [-smap snp_map.gz] [-gmap gene_map.gz] [-annot annotation_file.gz] [--load_bf | --load_zval]\n\n");
   
 
 
@@ -55,6 +55,7 @@ int main(int argc, char **argv){
 
   int force_logistic = 0;
   int load_bf = 0;
+  int load_zval =0;
   double EM_thresh = 0.05;
   double dist_bin_size = -1;
 
@@ -100,6 +101,16 @@ int main(int argc, char **argv){
       continue;
     }
     
+
+   
+    if(strcmp(argv[i], "--load_zval")==0){
+      load_zval = 1;
+      continue;
+    }
+    
+
+   
+
 
     if(strcmp(argv[i], "-dist_bin_size") == 0){
       dist_bin_size = atof(argv[++i]);
@@ -164,9 +175,14 @@ int main(int argc, char **argv){
   if(load_bf){
     con.load_data_BF(data_file);
   }else{
-    con.load_data(data_file);
+    if(load_zval)
+      con.load_data_zscore(data_file);
+    else
+      con.load_data(data_file);
   }
+
   con.load_map(gmap_file, smap_file);
+  
   con.load_annotation(annot_file);
   
   fprintf(stderr,"Initializing ... \n");
