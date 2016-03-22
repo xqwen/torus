@@ -628,25 +628,14 @@ void controller::run_EM(){
   double last_log10_lik = -9999999;
   init_params();
 
-  fprintf(stderr,"  Iter          loglik          Intercept    ");
-  
-  for(int i=0;i<dvar_name_vec.size();i++){
-    string prefix = dvar_name_vec[i];
-    int level = gsl_vector_int_get(dlevel,i);
-    for(int j=1;j<level;j++){
-      ostringstream stream;
-      stream <<prefix<<"."<<j;
-      string label = stream.str();
-      fprintf(stderr, "%s\t", label.c_str());
-    }
-    
-  }
 
-  for(int i=0;i<cvar_name_vec.size();i++){
-    fprintf(stderr, "%s\t", cvar_name_vec[i].c_str());
-  }
-    
-  fprintf(stderr,"\n");
+          
+  
+
+
+  int first_run = 1;
+  // examine the stability for prob annotations
+  
   while(1){
     
     
@@ -657,11 +646,41 @@ void controller::run_EM(){
    
       locVec[i].EM_update();
       curr_log10_lik += locVec[i].log10_lik;
-      
-         
+               
     }
+
+    if(first_run){
+      
+      if(single_fuzzy_annot == 1)
+	single_probt_est();
+      
+      fprintf(stderr,"  Iter          loglik          Intercept    ");
+	
+      for(int i=0;i<dvar_name_vec.size();i++){
+	string prefix = dvar_name_vec[i];
+	int level = gsl_vector_int_get(dlevel,i);
+	for(int j=1;j<level;j++){
+	  ostringstream stream;
+	  stream <<prefix<<"."<<j;
+	    string label = stream.str();
+	    fprintf(stderr, "%s\t", label.c_str());
+	}
+	
+      }
+      
+      for(int i=0;i<cvar_name_vec.size();i++){
+	fprintf(stderr, "%s\t", cvar_name_vec[i].c_str());
+      }
+      
     
-    
+      fprintf(stderr,"\n");
+
+
+	
+      first_run = 0;
+    }
+
+
 
     if(ncoef==1){
       simple_regression();
@@ -671,19 +690,21 @@ void controller::run_EM(){
       if(kd == 1 && !force_logistic){
 	single_ct_regression();
       }else{
-	logistic_cat_fit(beta_vec, Xd, dlevel,pip_vec, 0,0);
+	logistic_cat_fit(beta_vec, Xd, dlevel,pip_vec, l1_lambda,l2_lambda);
       }
       
       logistic_cat_pred(beta_vec, Xd, dlevel,prior_vec);
     }
     // only continuous annotations
     else if(kc!=0 && kd==0){
-      logistic_cont_fit(beta_vec, Xc, pip_vec,0,0);
+      
+      logistic_cont_fit(beta_vec, Xc, pip_vec,l1_lambda, l2_lambda);      
       logistic_cont_pred(beta_vec,Xc, prior_vec);
+	
     }
     // both continuous and categorical annotations
     else if(kc!=0 && kd !=0){
-      logistic_mixed_fit(beta_vec, Xd, dlevel, Xc, pip_vec, 0,0);
+      logistic_mixed_fit(beta_vec, Xd, dlevel, Xc, pip_vec, l1_lambda,l2_lambda);
       logistic_mixed_pred(beta_vec,Xd, dlevel, Xc, prior_vec);
     }
 
@@ -706,7 +727,9 @@ void controller::run_EM(){
     }
 
     last_log10_lik = curr_log10_lik;
-  }   
+  }
+  
+
   
 }
 
@@ -726,6 +749,77 @@ void controller::simple_regression(){
   gsl_vector_set(beta_vec,0, log(new_prior/(1-new_prior)));
 }
 
+
+
+void controller::single_probt_regression(){
+  /*
+  for(int i=0;i<p;i++){
+  
+    double qv = gsl_matrix_get(Xc,i,0);
+    double pv = gsl_vector_get(pip_vec,i);
+    printf("%7.3e  %7.3e\n",pv, qv);
+  }
+  exit(0);
+  */
+  double b0 = gsl_vector_get(beta_vec,0);
+  double b1 = gsl_vector_get(beta_vec,1);
+  
+  //gsl_vector_set(beta_vec,1, b1);
+  double p1 = exp(b0+b1)/(1+exp(b0+b1));
+  double p0 = exp(b0)/(1+exp(b0));
+  
+
+  for(int i=0;i<p;i++){
+    double qv = gsl_matrix_get(Xc,i,0);
+    //double new_prior = qv*p1 + (1-qv)*p0;
+    double new_prior = exp(b0+b1*qv)/(1+exp(b0+b1*qv));
+    gsl_vector_set(prior_vec,i,new_prior);   
+  }
+  
+}
+
+
+
+
+
+
+
+
+
+
+void controller::single_probt_est(){
+  
+  if(!(kc==0&&kd==1) && !(kd==0&&kc==1))
+    return;
+  
+  double c00 = 0;
+  double c11 = 0;
+  double c10 = 0;
+  double c01 = 0;
+  
+  for(int i=0;i<p;i++){
+    double qv;
+    if(kc==1)
+      qv = gsl_matrix_get(Xc,i,0);
+    if(kd==1)
+      qv = double(gsl_matrix_int_get(Xd,i,0));
+    
+    double pv = gsl_vector_get(pip_vec,i);
+    c11 += pv*qv;
+    c10 += pv*(1-qv);
+    c01 += (1-pv)*qv;
+    c00 += (1-pv)*(1-qv);
+  }
+  
+  double sd = sqrt( 1/c11 + 1/c10 + 1/c01 + 1/c00);
+  if(l2_lambda==0){
+    l2_lambda = sd;
+    fprintf(stderr, "Applying adaptive L2 penalty = %.3f\n\n", l2_lambda);
+    //fprintf(stderr, "Set L2 penalty = %.3f\n", sd);
+    force_logistic = 1;
+  }
+  //fprintf (stderr, "CT sd = %.3f  %.1f \n",sd, c11);
+}
 
 
 
@@ -972,20 +1066,6 @@ void controller::dump_prior(char *prior_path){
   
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 void Locus::EM_update(){
 
   
@@ -1089,7 +1169,7 @@ double compute_log10_BF(double beta, double se_beta){
 
 double compute_log10_BF(double z_score){
   
-  double kv[4] = {1, 5, 10, 20};
+  double kv[4] = {1,4,16,25};
   int size = 4;
   double z2 = pow(z_score, 2.0);
   vector<double> rstv;
