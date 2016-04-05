@@ -31,6 +31,7 @@ int main(int argc, char **argv){
   int csize = -1;
   int gsize = -1;
   int nthread = 1;
+  
   memset(data_file,0,128);
 
 
@@ -38,7 +39,7 @@ int main(int argc, char **argv){
 
 
   int find_egene = 0;
-  int est = 1;
+  int est = 0;
   
 
   
@@ -54,11 +55,14 @@ int main(int argc, char **argv){
   
 
   int force_logistic = 0;
+  int prob_annot = 0;
   int load_bf = 0;
   int load_zval =0;
   double EM_thresh = 0.05;
   double dist_bin_size = -1;
-
+  double l1_lambda = 0;
+  double l2_lambda = 0;
+  
   for(int i=1;i<argc;i++){
     
     if(strcmp(argv[i], "-d")==0 || strcmp(argv[i], "-data")==0){
@@ -89,8 +93,23 @@ int main(int argc, char **argv){
       EM_thresh = atof(argv[++i]);
       continue;
     }
-
     
+    if(strcmp(argv[i], "-l1_lambda")==0){
+      l1_lambda = atof(argv[++i]);
+      continue;
+    }
+
+    if(strcmp(argv[i], "-l2_lambda")==0){
+      l2_lambda = atof(argv[++i]);
+      continue;
+    }
+    
+
+    if(strcmp(argv[i], "--single_fuzzy_annot")==0){
+      prob_annot = 1;
+      continue;
+    }
+
     if(strcmp(argv[i], "--force_logistic")==0){
       force_logistic = 1;
       continue;
@@ -170,6 +189,20 @@ int main(int argc, char **argv){
     con.force_logistic = 1;
   }
 
+  if(prob_annot){
+    con.single_fuzzy_annot = 1;
+  }
+
+  if(l1_lambda!=0){
+    con.l1_lambda = l1_lambda;
+    con.force_logistic = 1;
+  }
+
+  if(l2_lambda!=0){
+    con.l2_lambda = l2_lambda;
+    con.force_logistic =1;
+  }
+
 
 
   if(load_bf){
@@ -186,6 +219,12 @@ int main(int argc, char **argv){
   con.load_annotation(annot_file);
   
   fprintf(stderr,"Initializing ... \n");
+
+  if(est==0 && find_egene==0){
+    est = 1;
+  }
+
+
   if(est)
     con.estimate();
   if(find_egene)

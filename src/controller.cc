@@ -882,6 +882,7 @@ void controller::find_eGene(double fdr_thresh){
   double rej = 1.0;
   double cpr = 0.0;
   int rej_decision = 1;
+  int rej_count = 0;
   for(int i=0;i<locVec.size();i++){
     cpr += locVec[i].fdr;
     if(cpr/rej > fdr_thresh){
@@ -889,10 +890,13 @@ void controller::find_eGene(double fdr_thresh){
     }
     printf("%5d  %20s    %9.3e    %d\n",int(rej), locVec[i].id.c_str(), locVec[i].fdr,rej_decision);
     rej++;
+    if(rej_decision == 1){
+      rej_count++;
+    }
   }
   
+  fprintf(stderr,"\n\n    Total Loci: %d   Rejections: %d\n", int(locVec.size()), rej_count); 
   
-
 }
 
 
@@ -926,6 +930,13 @@ void controller::estimate(){
     logistic_mixed_pred(beta_vec,Xd, dlevel, Xc, prior_vec);
   }
   
+  if(kc==0 && kd ==0){
+    
+    for(int i=0;i<p;i++){
+      gsl_vector_set(prior_vec,i,0.50);
+    }
+  }
+
   double null_log10_lik = 0;
   for(int k=0;k<locVec.size();k++){
     locVec[k].EM_update();
@@ -935,8 +946,9 @@ void controller::estimate(){
   if(diff<1e-8){
     diff = 1e-8;
   }
+  
   double sd = fabs(est)/sqrt(2*diff);
-  printf("%25s  %9.3f     %9.3f  %9.3f\n", "Intercept", est, est-1.96*sd, est+1.96*sd);
+  printf("\n%25s  %9.3f     %9.3f  %9.3f\n", "Intercept", est, est-1.96*sd, est+1.96*sd);
   gsl_vector_memcpy(beta_vec, saved_beta_vec);
   gsl_vector_memcpy(prior_vec, saved_prior_vec);
 
