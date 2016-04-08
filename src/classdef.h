@@ -80,6 +80,8 @@ class controller {
     force_logistic = 0;
     dist_bin_size = -1;
     finish_em = 0;
+    single_fuzzy_annot = 0;
+    l1_lambda=l2_lambda=0;
   }
 
   // storage
@@ -144,8 +146,13 @@ class controller {
   
   void simple_regression();
   void single_ct_regression();
+  void single_probt_est();
+  void single_probt_regression();
   int force_logistic;
+  int single_fuzzy_annot;
   
+  double l1_lambda, l2_lambda; //shrinkage for enrich param est
+
 
   void init_params();
     
