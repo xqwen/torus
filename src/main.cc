@@ -42,7 +42,7 @@ int main(int argc, char **argv){
   int est = 0;
   
 
-  
+  double init_pi1 = 1e-3;
 
   char ci_file[128];
   memset(ci_file,0,128); 
@@ -109,6 +109,13 @@ int main(int argc, char **argv){
       prob_annot = 1;
       continue;
     }
+
+    
+    if(strcmp(argv[i], "-init_pi1")==0){
+      init_pi1 = atof(argv[++i]);
+      continue;
+    }
+
 
     if(strcmp(argv[i], "--force_logistic")==0){
       force_logistic = 1;
@@ -202,7 +209,9 @@ int main(int argc, char **argv){
     con.l2_lambda = l2_lambda;
     con.force_logistic =1;
   }
-
+  
+  
+  con.init_pi1 = init_pi1;
 
 
   if(load_bf){

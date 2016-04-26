@@ -593,7 +593,7 @@ void controller::init_params(){
   prior_vec = gsl_vector_calloc(p);
   pip_vec = gsl_vector_calloc(p);
   for(int i=0;i<p;i++){
-    gsl_vector_set(prior_vec, i, 1e-3);
+    gsl_vector_set(prior_vec, i, init_pi1);
   }
   
 
@@ -986,11 +986,22 @@ void controller::estimate(){
       }
 
       double null_log10_lik = 0;
+     
       for(int k=0;k<locVec.size();k++){
 	locVec[k].EM_update();
 	null_log10_lik += locVec[k].log10_lik;
       }
+  
       double diff = (final_log10_lik - null_log10_lik)/log10(exp(1));
+      
+      //printf("%f  %f  %f\n", null_log10_lik/log10(exp(1)), final_log10_lik/log10(exp(1)), diff);
+
+      if(diff<0){
+	double curr_log10_lik = final_log10_lik;
+	est = fine_optimize_beta(index, est, null_log10_lik,  curr_log10_lik);
+	diff = fabs(curr_log10_lik - null_log10_lik)/log10(exp(1));
+      }
+      
       if(diff<1e-8){
 	diff = 1e-8;
       }
@@ -1025,7 +1036,15 @@ void controller::estimate(){
       locVec[k].EM_update();
       null_log10_lik += locVec[k].log10_lik;
     }
+
     double diff = (final_log10_lik - null_log10_lik)/log10(exp(1));
+    
+    if(diff<0){
+      double curr_log10_lik = final_log10_lik;
+      est = fine_optimize_beta(index, est, null_log10_lik,  curr_log10_lik);
+      diff = fabs(curr_log10_lik - null_log10_lik)/log10(exp(1));
+    }
+   
     if(diff<1e-8){
       diff = 1e-8;
     }
@@ -1075,7 +1094,101 @@ void controller::dump_prior(char *prior_path){
 }
 						
     
+
+double controller::fine_optimize_beta(int index, double est, double null_log10_lik, double &curr_log10_lik){
   
+  double gr = (sqrt(5)-1)/2.0;
+  
+  /*
+  double a = -fabs(est);
+  double b = fabs(est);
+  */
+
+  double a = est;
+  double b = 0;
+  if(a > b){
+    b = a;
+    a = 0;
+  }
+  double c = b - gr*(b-a);
+  double d = a + gr*(b-a);
+
+  double thresh = 1e-3;
+  if(fabs(c-d)<thresh){
+    thresh = fabs(c-d)/2.0;
+  }
+
+  double fc;
+  double fd;
+
+
+  while((d-c)>thresh){
+    
+    fc = eval_likelihood(c, index);
+    fd = eval_likelihood(d, index);
+
+    
+    //printf("%f %f %f %f   %f %f   %f\n",a, d
+    if(fc > fd){
+      /*
+      if(fc > null_log10_lik){
+	curr_log10_lik = fc;
+	return c;
+      }
+      */
+      b = d;
+      d = c;
+      c = b - gr*(b-a);
+    }else{
+      /*
+      if(fd > null_log10_lik){
+        curr_log10_lik = fd;
+	return d;
+      }
+      */
+      a = c;
+      c = d;
+      d = a + gr*(b-a);
+    }
+  }
+  
+
+  curr_log10_lik = fc;
+
+  return (b+a)/2;
+
+  
+  
+}
+
+
+
+double controller::eval_likelihood(double x, int index){
+
+
+  gsl_vector_set(beta_vec,index, x);
+
+  if(kc==0 && kd!=0){
+    logistic_cat_pred(beta_vec, Xd, dlevel,prior_vec);
+  }
+  if(kc!=0 && kd==0){
+    logistic_cont_pred(beta_vec,Xc, prior_vec);
+  }
+  if(kc!=0 && kd !=0){
+    logistic_mixed_pred(beta_vec,Xd, dlevel, Xc, prior_vec);
+  }
+
+  double log10_lik = 0;
+  for(int k=0;k<locVec.size();k++){
+    locVec[k].EM_update();
+    log10_lik += locVec[k].log10_lik;
+  }
+  
+  return log10_lik;
+}
+
+
+
 
 
 void Locus::EM_update(){

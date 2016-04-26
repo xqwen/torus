@@ -82,6 +82,7 @@ class controller {
     finish_em = 0;
     single_fuzzy_annot = 0;
     l1_lambda=l2_lambda=0;
+    init_pi1 = 1e-3;
   }
 
   // storage
@@ -129,7 +130,7 @@ class controller {
   double final_log10_lik;
   
 
-
+  double init_pi1;
   int nthread; 
 
 
@@ -162,6 +163,12 @@ class controller {
   void find_eGene(double thresh=0.05);
   void estimate();
   void dump_prior(char *path);
+
+ private:
+  double eval_likelihood(double x, int index);
+  double fine_optimize_beta(int index, double est, double null_log10_lik, double &curr_log10_lik);
+  
+
 
 
 };
