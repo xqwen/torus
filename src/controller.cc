@@ -214,7 +214,6 @@ void controller::load_data_fastqtl(char *filename){
 
   p = index_count;
 
-  dist_bin = 0;
   
   if(fastqtl_use_dtss){
     dtss_map[0] =0;
@@ -261,7 +260,7 @@ void controller::load_data_fastqtl(char *filename){
 void controller::load_data_zscore(char *filename){
 
   
-
+  
   ifstream dfile(filename, ios_base::in | ios_base::binary);
   boost::iostreams::filtering_istream in;
 
@@ -346,7 +345,7 @@ void controller::load_data_zscore(char *filename){
   fprintf(stderr, "Read in %d loci, %d locus-SNP pairs ... \n",loc_count, p);
   
   prior_vec = gsl_vector_calloc(p);
-
+  
 }
 
 
@@ -453,13 +452,15 @@ void controller::load_data_BF(char *filename){
 
 
 void controller::load_map(char* gene_file, char *snp_file){
-
-
+  
+  if(fastqtl_use_dtss)
+    return;
+  
   if(strlen(gene_file)==0 || strlen(snp_file)==0){
     return;
   }
 
-  dist_bin = 0;
+  
 
   map<string, int> gene_map;
   map<string, int> snp_map;
@@ -887,7 +888,13 @@ void controller::run_EM(){
     last_log10_lik = curr_log10_lik;
   }
   
-
+  
+  double tp = 0;
+  for(int i=0;i<p;i++){
+    tp += gsl_vector_get(prior_vec,i);
+  }
+  if(print_avg)
+    fprintf(stderr, "\nAvg. probability of association (%d unique variants): %9.3e\n", int(snp_hash.size()),tp/int(snp_hash.size()));
   
 }
 
@@ -1264,7 +1271,7 @@ void controller::dump_pip(char *file){
     for(int j=0;j<locVec[i].snpVec.size();j++){
       int index = locVec[i].snpVec[j].index;
       string name = locVec[i].snpVec[j].id;
-      fprintf(fd, "%s\t%s\t%9.4e\t%9.4e\t%9.4e\n",name.c_str(), gname.c_str(), gsl_vector_get(prior_vec, index), gsl_vector_get(pip_vec, index), locVec[i].fdr);
+      fprintf(fd, "%s\t%s\t%9.4e\t%9.4e\n",name.c_str(), gname.c_str(), gsl_vector_get(prior_vec, index), gsl_vector_get(pip_vec, index));
     }
   }
   fclose(fd);

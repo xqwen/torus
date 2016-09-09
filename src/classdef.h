@@ -79,10 +79,13 @@ class controller {
     p=kc=kd=dist_bin_level = 0;
     force_logistic = 0;
     dist_bin_size = -1;
+    fastqtl_use_dtss = 0;
+    dist_bin = 0;
     finish_em = 0;
     single_fuzzy_annot = 0;
     l1_lambda=l2_lambda=0;
     init_pi1 = 1e-3;
+    print_avg = 0;
   }
 
   // storage
@@ -135,7 +138,7 @@ class controller {
   int finish_em;
 
   int fastqtl_use_dtss;
-
+  int print_avg;
 
 
   void load_data(char *filename);    // load data with MatrixeQTL format -- default
