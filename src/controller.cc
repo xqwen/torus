@@ -39,6 +39,13 @@ void controller::load_data(char *filename){
   double t_val;
   int index_count = 0;
   int loc_count = 0;
+  
+  double median_zcount = 0;
+
+
+  // for grid setting
+  double min = 1; 
+  double max = 0;; 
   while(getline(in,line)){
 
     ins.clear();
@@ -72,8 +79,25 @@ void controller::load_data(char *filename){
       }
       
       se_beta = beta/t_val;
-      double log10_BF = compute_log10_BF(beta, se_beta);
-      SNP snp(snp_id, log10_BF, index_count);
+      SNP snp(snp_id, index_count);
+
+      if(shrink_pi0>0 && pow(t_val,2)<= 0.4549){     
+ 	 median_zcount++;
+      } 
+      if(use_ash){
+      	if(se_beta<min)
+	      min = se_beta;
+      
+      	if(beta*beta - se_beta*se_beta > max){
+	      max = pow(beta,2)-pow(se_beta,2);
+      	}
+ 
+       snp.beta = beta;
+       snp.se_beta = se_beta;
+      }else{
+	snp.log10_BF = compute_log10_BF(beta, se_beta);
+	snp.grid_size = 1;
+      }
       index_count++;
       snp_hash[snp_id] = 100;
       snp_vec.push_back(snp);
@@ -97,17 +121,47 @@ void controller::load_data(char *filename){
     }
   }
   
-  
- 
-  p = index_count;
+       
+ if(use_ash){
+ 	// compute BF vector
+ 	double phi_min = min/10;
+ 	double phi_max = 2*sqrt(max);
+ 	if(phi_max<phi_min){
+		 phi_max = 8*phi_min;
+ 	}
 
-  fprintf(stderr, "Read in %d loci, %d locus-SNP pairs ... \n",loc_count, p);
+ 	grid_vec = make_grid(phi_min, phi_max);
+ 
+  	grid_size = grid_vec.size();
+	
+  	grid_weight = new double[grid_size];
+  	for(int i=0;i<grid_size;i++){
+    		grid_weight[i] = 1.0/double(grid_size);
+  	}
+	for(int i=0;i<locVec.size();i++){
+		 for(int j=0;j<locVec[i].snpVec.size();j++){
+			 locVec[i].snpVec[j].compute_log10_BF_vec_bhat(grid_vec);
+			 locVec[i].snpVec[j].weightv = grid_weight;
+	 	}	
+		locVec[i].get_BF_matrix(); 
+ 	}	
+ }
+ 
+ p = index_count;
+
+ if(shrink_pi0>0){
+	if(set_pi0 > 0){
+           pi0_ubd = set_pi0;
+	}else{
+	   pi0_ubd = 2*median_zcount/p;
+	}
+ }	
+
+ fprintf(stderr, "Read in %d loci, %d locus-SNP pairs ... \n",loc_count, p);
   
-  prior_vec = gsl_vector_calloc(p);
+ prior_vec = gsl_vector_calloc(p);
 
 }
-
-
 
 
 void controller::load_data_fastqtl(char *filename){
@@ -140,12 +194,17 @@ void controller::load_data_fastqtl(char *filename){
 
   map<int, int> bin_hash;
   
+  double min = 1;
+  double max = 0;
+
+  double median_zcount = 0;
+
 
   while(getline(in,line)){
 
     ins.clear();
     ins.str(line);
-
+    
     if(ins>> loc_id >> snp_id >> dtss >>pval >> bhat >> sdbeta){
       //printf("%s  %f\n", snp_id.c_str(), beta);                                                         
       if(curr_loc_id != loc_id){
@@ -172,9 +231,24 @@ void controller::load_data_fastqtl(char *filename){
 
       }
       
-      double log10_BF = compute_log10_BF(bhat, sdbeta);
-      SNP snp(snp_id, log10_BF, index_count);
-
+      //double log10_BF = compute_log10_BF(bhat, sdbeta);
+      SNP snp(snp_id, index_count);
+      if(shrink_pi0>0 && pow(bhat/sdbeta,2)<= 0.4549){
+	      median_zcount++;
+      }
+      if(use_ash){
+      	snp.beta = bhat;
+      	snp.se_beta = sdbeta;
+      	if(sdbeta<min){
+		min = sdbeta;
+      	}		
+      	if(bhat*bhat-sdbeta*sdbeta > max){
+	      max = pow(bhat,2) - pow(sdbeta,2);
+      	}
+      }else{
+      	snp.log10_BF = compute_log10_BF(bhat, sdbeta);
+	snp.grid_size = 1;
+      }	
       // handling dtss info
       if(fastqtl_use_dtss){
 	int bin = classify_dist_bin(dtss, 0 , dist_bin_size);
@@ -211,11 +285,44 @@ void controller::load_data_fastqtl(char *filename){
     }
   }
 
+ if(use_ash){
+ 	// compute BF vector
+ 	double phi_min = min/10;
+ 	double phi_max = 2*sqrt(max);
+ 	if(phi_max<phi_min){
+		 phi_max = 8*phi_min;
+ 	}	
 
-  p = index_count;
-
+ 	grid_vec = make_grid(phi_min, phi_max);
+ 	grid_size = grid_vec.size();
+  	grid_weight = new double[grid_size];
+  	for(int i=0;i<grid_size;i++){
+    		grid_weight[i] = 1.0/double(grid_size);
+  	}
   
-  if(fastqtl_use_dtss){
+ 	for(int i=0;i<locVec.size();i++){
+		for(int j=0;j<locVec[i].snpVec.size();j++){
+			 locVec[i].snpVec[j].compute_log10_BF_vec_bhat(grid_vec);
+			 locVec[i].snpVec[j].weightv = grid_weight;
+		}		                    
+		locVec[i].get_BF_matrix();
+ 	}
+
+ }
+
+ p = index_count;
+
+ if(shrink_pi0>0){
+	if(set_pi0 > 0){
+           pi0_ubd = set_pi0;
+	}else{
+	   pi0_ubd = 2*median_zcount/p;
+	}
+ }	
+
+ 
+  
+ if(fastqtl_use_dtss){
     dtss_map[0] =0;
     dtss_rmap[0] = 0;
     int count = 1;
@@ -279,6 +386,8 @@ void controller::load_data_zscore(char *filename){
   double z_val;
   int index_count = 0;
   int loc_count = 0;
+  double max = 0;
+  double median_zcount = 0;
   while(getline(in,line)){
 
     ins.clear();
@@ -312,9 +421,23 @@ void controller::load_data_zscore(char *filename){
    
       }
       
-      double log10_BF = compute_log10_BF(z_val);
+      //double log10_BF = compute_log10_BF(z_val);
       //printf("%15s   %7.3f\n", snp_id.c_str(), log10_BF);
-      SNP snp(snp_id, log10_BF, index_count);
+      SNP snp(snp_id, index_count);
+      
+      if(shrink_pi0>0 && pow(z_val,2)<= 0.4549){
+	    median_zcount++;
+      }
+
+      if(use_ash){	
+   	 snp.zval = z_val;
+      	 if(z_val*z_val - 1 > max){
+	      max = z_val*z_val - 1;
+      	}	
+      }else{
+	snp.log10_BF = compute_log10_BF(z_val);
+	snp.grid_size = 1;
+      }
       index_count++;
       snp_hash[snp_id] = 100;
       snp_vec.push_back(snp);
@@ -338,11 +461,46 @@ void controller::load_data_zscore(char *filename){
     }
   }
   
-  
+ if(use_ash){ 
+ 	// compute BF vector
+ 	double phi_min = 1.0/10;
+ 	double phi_max = 2*sqrt(max);
+ 	if(phi_max<phi_min){
+ 		phi_max = 8*phi_min;
+ 	}
  
+ 	grid_vec = make_grid(phi_min, phi_max);
+
+ 
+  	grid_size = grid_vec.size();
+  	grid_weight = new double[grid_size];
+  	for(int i=0;i<grid_size;i++){
+    		grid_weight[i] = 1.0/double(grid_size);
+  	}
+
+ 	for(int i=0;i<locVec.size();i++){
+ 		for(int j=0;j<locVec[i].snpVec.size();j++){
+			locVec[i].snpVec[j].compute_log10_BF_vec_zval(grid_vec);
+			locVec[i].snpVec[j].weightv = grid_weight;
+		}
+		locVec[i].get_BF_matrix();
+ 	}	
+   
+  }
+  
   p = index_count;
 
-  fprintf(stderr, "Read in %d loci, %d locus-SNP pairs ... \n",loc_count, p);
+  if(shrink_pi0>0){
+	if(set_pi0 > 0){
+           pi0_ubd = set_pi0;
+	}else{
+	   pi0_ubd = 2*median_zcount/p;
+	}
+ }	
+
+
+
+  fprintf(stderr, "Read in %d loci, %d locus-SNP pairs ... \n", loc_count, p);
   
   prior_vec = gsl_vector_calloc(p);
   
@@ -443,6 +601,150 @@ void controller::load_data_BF(char *filename){
   prior_vec = gsl_vector_calloc(p);
 
 }
+
+
+
+// this function directly loads pre-computed log10 Bayes factors
+
+void controller::load_data_BSLMM_BF(char *filename, int gsize){
+
+
+  ifstream dfile(filename, ios_base::in | ios_base::binary);
+  boost::iostreams::filtering_istream in;
+
+  in.push(boost::iostreams::gzip_decompressor());
+  in.push(dfile);
+  
+ 
+  string line;
+  istringstream ins;
+
+  string curr_loc_id = "";
+
+  vector<SNP> snp_vec;
+  vector<double> baseline_vec;
+  string loc_id;
+  string snp_id;
+  double log10_BF;
+  int index_count = 0;
+  int loc_count = 0;
+
+  
+  // initialize grid_weight
+  grid_size = gsize;
+  grid_weight = new double[grid_size];
+  for(int i=0;i<grid_size;i++){
+    grid_weight[i] = 1.0/double(grid_size);
+  }
+  
+  
+  while(getline(in,line)){
+
+    ins.clear();
+    ins.str(line);
+
+    if(ins>>snp_id>>loc_id){
+      
+      //printf("%s  %f\n", snp_id.c_str(), log10_BF);
+
+      if(curr_loc_id != loc_id){
+	if(curr_loc_id != ""){
+	  
+	  if(loc_hash.find(curr_loc_id)== loc_hash.end()){
+	    Locus loc(curr_loc_id, snp_vec);
+	    if(baseline_vec.size()>0){
+	      loc.baseline_vec = baseline_vec;
+	    }
+	    int pos = loc_hash.size();
+	    loc_hash[curr_loc_id] = pos;
+	    locVec.push_back(loc);
+	    locVec[pos].get_BF_matrix();
+	    loc_count++;
+	  }else{
+	    // already defined, concate the existing snpVec
+	    int pos = loc_hash[curr_loc_id];
+	    for(int i=0;i<snp_vec.size();i++){
+	      locVec[pos].snpVec.push_back(snp_vec[i]);
+	    }	   
+	  }
+	  
+	  snp_vec.clear();
+	  baseline_vec.clear();
+	}
+	curr_loc_id = loc_id;
+   
+      }
+
+      vector<double> bf_vec;
+      double bf;
+      for (int i=0;i<grid_size;i++){
+	if(ins >> bf){
+	  bf_vec.push_back(bf);
+	}
+      }
+      if(snp_id == "BASELINE"){
+	baseline_vec = bf_vec;
+      }else{
+	SNP snp(snp_id, bf_vec, index_count, grid_weight);
+	index_count++;
+	snp_hash[snp_id] = 100;
+	snp_vec.push_back(snp);
+      }
+    }
+  }
+   
+  dfile.close();
+
+  if(loc_hash.find(curr_loc_id)== loc_hash.end()){
+    Locus loc(curr_loc_id, snp_vec);
+    if(baseline_vec.size()>0){
+      loc.baseline_vec = baseline_vec;
+    }
+    int pos = loc_hash.size();
+    loc_hash[curr_loc_id] = pos;
+    locVec.push_back(loc);
+    locVec[pos].get_BF_matrix();
+    loc_count++;
+  }else{
+    // already defined, concate the existing snpVec                                               
+    int pos = loc_hash[curr_loc_id];
+    for(int i=0;i<snp_vec.size();i++){
+      locVec[pos].snpVec.push_back(snp_vec[i]);
+    }
+  }
+  
+  
+ 
+  p = index_count;
+
+  fprintf(stderr, "Read in %d loci, %d locus-SNP pairs ... \n",loc_count, p);
+  
+  prior_vec = gsl_vector_calloc(p);
+
+  /*
+    for(int i=0;i<locVec.size();i++){
+    for(int j=0;j<locVec[i].snpVec.size();j++){
+      for(int k=0;k<grid_size;k++){
+	printf("%7.2e  ", locVec[i].snpVec[j].log10_BF_vec[k]);
+	printf("%7.2e    ", locVec[i].BF_wv_vec[k][j]);
+      }
+    }
+    printf("\n");
+  }
+  */
+
+  
+
+  
+  
+}
+
+
+
+
+
+
+
 
 
 
@@ -746,6 +1048,21 @@ int controller::count_factor_level(int col){
 }
 
 
+vector<double> controller::make_grid(double phi_min, double phi_max){
+
+	vector<double> gvec;
+	gvec.push_back(phi_max); //phi_max
+	double phi = phi_max;
+	while(phi>phi_min){
+		phi = phi/sqrt(2);
+		gvec.push_back(phi); //phi
+	}
+	std::sort(gvec.begin(),gvec.end());
+
+	return gvec;
+}
+
+
 
 void controller::init_params(){
   
@@ -781,42 +1098,16 @@ void controller::init_params(){
 
 void controller::run_EM(){  
   
-  // start iteration
+  // print header      	
   fprintf(stderr,"Starting EM ... \n");
   int count = 1;
   double last_log10_lik = -9999999;
   init_params();
 
-
-          
-  
-
-
-  int first_run = 1;
-  // examine the stability for prob annotations
-  
-  while(1){
-    
-    
-    double curr_log10_lik = 0;
-
-
-    for(int i=0;i<locVec.size();i++){
-   
-      locVec[i].EM_update();
-      curr_log10_lik += locVec[i].log10_lik;
-               
-    }
-
-    if(first_run){
-      
-      if(single_fuzzy_annot == 1)
-	single_probt_est();
-      
-      fprintf(stderr,"  Iter          loglik          Intercept    ");
+  fprintf(stderr,"  Iter          loglik          Intercept    ");
 	
-      for(int i=0;i<dvar_name_vec.size();i++){
-	string prefix = dvar_name_vec[i];
+  for(int i=0;i<dvar_name_vec.size();i++){
+ 	string prefix = dvar_name_vec[i];
 	int level = gsl_vector_int_get(dlevel,i);
 	for(int j=1;j<level;j++){
 	  ostringstream stream;
@@ -825,21 +1116,45 @@ void controller::run_EM(){
 	    fprintf(stderr, "%s\t", label.c_str());
 	}
 	
-      }
+   }
       
-      for(int i=0;i<cvar_name_vec.size();i++){
+   for(int i=0;i<cvar_name_vec.size();i++){
 	fprintf(stderr, "%s\t", cvar_name_vec[i].c_str());
-      }
+   }
       
+
+      
+   if(grid_size> 1 && !use_ash){
+	fprintf(stderr,"  grid_weights (%d)\t",grid_size);
+   }
+      
+   fprintf(stderr,"\n");
     
-      fprintf(stderr,"\n");
+  int first_run = 1;
+  
+  // start iteration
+  while(1){
+    
+    
+    double curr_log10_lik = 0;
 
-
-	
-      first_run = 0;
+    //E-step
+    for(int i=0;i<locVec.size();i++){
+	locVec[i].EM_update();
+	curr_log10_lik += locVec[i].log10_lik;
     }
+      
 
-
+    // M-step
+    if(grid_size > 1){
+        update_grid_weight();
+    }
+        
+    if(first_run && single_fuzzy_annot == 1){
+	 //set shrinkage parameter
+	single_probt_est();
+        first_run = 0;
+    }
 
     if(ncoef==1){
       simple_regression();
@@ -867,18 +1182,27 @@ void controller::run_EM(){
       logistic_mixed_pred(beta_vec,Xd, dlevel, Xc, prior_vec);
     }
 
-    //printf("%f   %f\n%f   %f\n",ct_00, ct_01, ct_10, ct_11);
+
+   // output update to stderr
+
     fprintf(stderr,"%4d        %10.3f        ",count++,curr_log10_lik/log10(exp(1)));
     
 
     for(int i=0;i<ncoef;i++){
       fprintf(stderr, "%9.3f  ",gsl_vector_get(beta_vec,i));
     }
+
+
+    if(grid_size>1 && !use_ash){
+      for(int i=0;i<grid_size;i++){
+	fprintf(stderr, "%9.3f  ",grid_weight[i]);
+      }
+    }
+    
     fprintf(stderr,"\n");
    
-    // output 
-    
-    
+    // convergence checking
+   
     
     if(fabs(curr_log10_lik-last_log10_lik)<EM_thresh){
       final_log10_lik = curr_log10_lik;
@@ -900,6 +1224,40 @@ void controller::run_EM(){
 
 
 
+
+void controller::update_grid_weight(){
+
+  if(grid_size<2)
+    return;
+  vector<double> pcount_vec(grid_size+1, 0);
+  for(int i=0;i<locVec.size();i++){
+    for(int j=0; j<grid_size+1;j++){
+      // avoid numerical underflow
+           
+      pcount_vec[j] += locVec[i].wv_probv[j];
+    }
+  }
+
+
+
+  double sum = 0;
+  double w0 = pcount_vec[grid_size]/double(locVec.size());
+  for(int i=0;i<grid_size;i++){
+    grid_weight[i] = (pcount_vec[i]/double(locVec.size()))/(1-w0);
+    if(grid_weight[i]<0)
+      grid_weight[i] = 0;
+    sum += grid_weight[i];
+  }
+
+  for(int i=0;i<grid_size;i++){
+    grid_weight[i] = grid_weight[i]/sum;
+  }
+  
+
+}
+
+
+
 void controller::simple_regression(){
   
   double sum = 0;
@@ -907,6 +1265,12 @@ void controller::simple_regression(){
     sum += gsl_vector_get(pip_vec,i);
   }
   double new_prior = sum/p;
+
+  if(shrink_pi0 != 0){
+     double pi0 = pi0_ubd*shrink_pi0 + (1-new_prior)*(1-shrink_pi0);
+     new_prior = 1-pi0;
+  }     
+
   for(int i=0;i<p;i++){
     gsl_vector_set(prior_vec,i,new_prior);
   }
@@ -942,13 +1306,6 @@ void controller::single_probt_regression(){
   }
   
 }
-
-
-
-
-
-
-
 
 
 
@@ -1053,11 +1410,17 @@ void controller::find_eGene(double fdr_thresh){
     if(cpr/rej > fdr_thresh){
       rej_decision = 0;
     }
-    printf("%5d  %20s    %9.3e    %d\n",int(rej), locVec[i].id.c_str(), locVec[i].fdr,rej_decision);
+    printf("%5d  %20s    %9.3e    %d",int(rej), locVec[i].id.c_str(), locVec[i].fdr,rej_decision);
     rej++;
     if(rej_decision == 1){
       rej_count++;
     }
+
+    if(print_lead_snp){
+      std::sort(locVec[i].snpVec.begin(), locVec[i].snpVec.end(), sort_by_BF);
+      printf("\t%20s", locVec[i].snpVec[0].id.c_str());
+    }
+    printf("\n");
   }
   
   fprintf(stderr,"\n\n    Total Loci: %d   Rejections: %d\n", int(locVec.size()), rej_count); 
@@ -1104,9 +1467,12 @@ void controller::estimate(){
 
   double null_log10_lik = 0;
   for(int k=0;k<locVec.size();k++){
+
     locVec[k].EM_update();
     null_log10_lik += locVec[k].log10_lik;
+    
   }
+  
   double diff = (final_log10_lik - null_log10_lik)/log10(exp(1));
   if(diff<1e-8){
     diff = 1e-8;
@@ -1151,10 +1517,12 @@ void controller::estimate(){
       }
 
       double null_log10_lik = 0;
-     
+
       for(int k=0;k<locVec.size();k++){
+
 	locVec[k].EM_update();
 	null_log10_lik += locVec[k].log10_lik;
+	
       }
   
       double diff = (final_log10_lik - null_log10_lik)/log10(exp(1));
@@ -1197,11 +1565,14 @@ void controller::estimate(){
     }
     
     double null_log10_lik = 0;
+
     for(int k=0;k<locVec.size();k++){
+
       locVec[k].EM_update();
       null_log10_lik += locVec[k].log10_lik;
+	
     }
-
+ 
     double diff = (final_log10_lik - null_log10_lik)/log10(exp(1));
     
     if(diff<0){
@@ -1227,8 +1598,26 @@ void controller::estimate(){
   gsl_vector_free(saved_beta_vec);
   gsl_vector_free(saved_prior_vec);
 
-}
+  if(grid_size>1){
+    printf("\n\n");
+    if(!use_ash){ 
+    	for(int i=0;i<grid_size;i++){
+      		printf("%25s %3d   %7.3e\n","grid_weight", (i+1), grid_weight[i]);
+    	}	
+    }else{
+        printf("%28s  %9s\n", "Effect size (phi)", "Weight");	    
+	for(int i = 0;i<grid_size;i++){
+           printf("%15s %9.3e       %9.3e\n", "",grid_vec[i], grid_weight[i]);
+	}	
+   }
 
+   if(set_pi0 > 0){
+     printf("\nfixed_pi0  %.3f  log10_likelihood  %9.3f\n", set_pi0, final_log10_lik);
+   }
+
+  
+  }
+}
 
 
 void controller::dump_prior(char *prior_path){
@@ -1239,7 +1628,7 @@ void controller::dump_prior(char *prior_path){
   }
  
   
-  fprintf(stderr,"Output priors ...\n");
+  fprintf(stderr,"Output priors to directory %s...\n", prior_path);
   if(mkdir(prior_path, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)!=0){
     fprintf(stderr, "Error: cannot create directory %s\n", prior_path);
     exit(1);
@@ -1264,20 +1653,46 @@ void controller::dump_pip(char *file){
     run_EM();
     finish_em = 1;
   }
-  fprintf(stderr,"Output pip file: %s ...\n",file);
+  fprintf(stderr,"Output PIPs to file %s: ...\n",file);
   FILE *fd = fopen(file, "w");
   for( int i=0; i<locVec.size();i++){
     string gname = locVec[i].id;
     for(int j=0;j<locVec[i].snpVec.size();j++){
       int index = locVec[i].snpVec[j].index;
       string name = locVec[i].snpVec[j].id;
-      fprintf(fd, "%s\t%s\t%9.4e\t%9.4e\n",name.c_str(), gname.c_str(), gsl_vector_get(prior_vec, index), gsl_vector_get(pip_vec, index));
+      fprintf(fd, "%s\t%s\t%9.4e\t%9.4e\n",name.c_str(), gname.c_str(),gsl_vector_get(pip_vec, index) , gsl_vector_get(prior_vec, index));
     }
   }
   fclose(fd);
 }
 
-						
+
+
+void controller::dump_wv(char *file){
+  if(grid_size<2)
+    return;
+  
+  if(!finish_em){
+    run_EM();
+    finish_em = 1;
+  }
+
+  fprintf(stderr,"Output grid weights to file %s: ...\n",file);
+  FILE *fd = fopen(file, "w");
+  for( int i=0; i<locVec.size();i++){
+    locVec[i].compute_fdr();
+    fprintf(fd, "%s\t%d\t\t%9.3e\t", locVec[i].id.c_str(), int(locVec[i].snpVec.size()), 1-locVec[i].fdr);
+    for(int j=0;j<grid_size;j++){
+      fprintf(fd, "\t%9.3e", locVec[i].wv_probv[j]);
+    }
+    fprintf(fd,"\n");
+  }
+}
+
+
+  
+
+
     
 
 double controller::fine_optimize_beta(int index, double est, double null_log10_lik, double &curr_log10_lik){
@@ -1368,6 +1783,7 @@ double controller::eval_likelihood(double x, int index){
     locVec[k].EM_update();
     log10_lik += locVec[k].log10_lik;
   }
+    
   
   return log10_lik;
 }
@@ -1376,52 +1792,92 @@ double controller::eval_likelihood(double x, int index){
 
 
 
+void Locus::get_BF_matrix(){
+  if(snpVec[0].grid_size<2)
+    return;
+
+  for(int i = 0; i< snpVec[0].grid_size;i++){
+    vector<double> BFv;
+    for(int j=0;j<snpVec.size();j++){
+      BFv.push_back(snpVec[j].log10_BF_vec[i]);
+    }
+    BF_wv_vec.push_back(BFv);
+  }
+  
+
+}
+
+
 void Locus::EM_update(){
 
-  
   // compute log10_lik
-  vector<double> BF_vec;
+  vector<double> BF_vec;  // snp-level avg. BF
   vector<double> p_vec;
-  
-  
+  	
+
   double locus_pi0 = 1;
   for(int i=0;i<snpVec.size();i++){
     double prior = gsl_vector_get(prior_vec, snpVec[i].index);
+    snpVec[i].log10_BF = snpVec[i].compute_log10_BF();
+    
+
     BF_vec.push_back(snpVec[i].log10_BF);
     p_vec.push_back(prior/(1-prior));
     locus_pi0 *= (1-prior);
   }
-
+  
   if(locus_pi0 < 1e-100){
     locus_pi0 = 1e-100;
   }
-  
-  for(int i=0;i<snpVec.size();i++){
-    p_vec[i] *= locus_pi0;
+
+   for(int i=0;i<snpVec.size();i++){
+      p_vec[i] *= locus_pi0;
+   }
+
+
+  double baseline_val = 0;
+  if(baseline_vec.size() > 0 ){
+    baseline_val = log10_weighted_sum(baseline_vec, snpVec[0].weightv);
   }
   
-  BF_vec.push_back(0);
-  p_vec.push_back(locus_pi0);
 
-  /*
-  for(int i=0;i<p_vec.size();i++){
-    printf("%d  %7.3e\n",i, p_vec[i]);
-  }
-  */
-
+  BF_vec.push_back(baseline_val);
+  vector<double> snp_wv = p_vec; // wihtout null config prob
+  p_vec.push_back(locus_pi0); // add null config prob
+  
   log10_lik = log10_weighted_sum(BF_vec, p_vec);
   
-  //printf("%s  log10_lik = %f\n",id.c_str(), log10_lik);
-  
   for(int i=0;i<snpVec.size();i++){
-    
     double val = log10(p_vec[i]) + snpVec[i].log10_BF - log10_lik;
     double pip = pow(10, val);
     gsl_vector_set(pip_vec, snpVec[i].index, pip);
   }
-  
- 
+
+  if(snpVec[0].grid_size>1){
+    wv_probv.clear();
+    double *weightv = snpVec[0].weightv;
+    double sum = 0;
+    for(int i=0;i<snpVec[0].grid_size;i++){
+      vector<double> BFv = BF_wv_vec[i];
+      double v = log10_weighted_sum(BFv, snp_wv);
+      double w_val = pow(10, v-log10_lik)*weightv[i];
+      if(w_val<0)
+ 	 w_val = 0;
+       wv_probv.push_back(w_val);
+       sum+= w_val;
+    }
+    //printf("%7.3f ", sum);
+    double pip0 = pow(10, log10(locus_pi0) - log10_lik);
+    //printf("%7.3f  %7.3f \n", pip0, pip0+sum);
+    wv_probv.push_back(pip0);
+  }
+
 }
+
+  
+
+
+
 
 
 void Locus::compute_fdr(){
@@ -1443,55 +1899,98 @@ void Locus::compute_fdr(){
   }
 
 
-  BF_vec.push_back(0);
+  double baseline_val =0;
+  if(baseline_vec.size() > 0 ){
+    baseline_val = log10_weighted_sum(baseline_vec, snpVec[0].weightv);
+  }
+
+  BF_vec.push_back(baseline_val);
   p_vec.push_back(locus_pi0);
   
   log10_lik = log10_weighted_sum(BF_vec, p_vec);
-  fdr =  pow(10,log10(locus_pi0)-log10_lik);
+  fdr =  pow(10,log10(locus_pi0)+baseline_val - log10_lik);
+
+}
+
+
+double SNP::compute_log10_BF(){
+
+  if(grid_size==1){
+    return log10_BF;
+  }
+  
+  return log10_weighted_sum(log10_BF_vec, weightv);
+}
+
+void SNP::compute_log10_BF_vec_bhat(vector<double> &grid){
+
+  if(se_beta == 0){
+	log10_BF_vec = vector<double> (grid.size(),0);
+	return;
+  }   
+  
+  double z2 = pow((beta/se_beta), 2.0);
+  double v2 = pow(se_beta, 2.0);
+  vector<double> rstv;
+  for(int i=0;i<grid.size();i++){
+    double w2 = pow(grid[i],2.0);
+    double val = 0.5*log(v2/(v2+w2)) + 0.5*z2*(w2/(v2+w2));
+    log10_BF_vec.push_back(val/log(10));
+  }
+  
+  grid_size = grid.size();
 
 }
 
 
 
-
+void SNP::compute_log10_BF_vec_zval(vector<double> &grid){
+  
+  double z2 = pow(zval, 2.0);
+  vector<double> rstv;
+  grid_size = grid.size();
+  for(int i=0;i<grid_size;i++){
+    double K = pow(grid[i],2);	  
+    double val = -0.5*log(1+K) + 0.5*z2*K/(1+K);
+    log10_BF_vec.push_back(val/log(10));
+  }
+}
 
 double compute_log10_BF(double beta, double se_beta){
 
-  if(se_beta == 0)
-    return 0;
-  
-  double phi[4] = {0.1,0.2,0.4,0.8};
-  int size = 4;
-  double z2 = pow((beta/se_beta), 2.0);
-  double v2 = pow(se_beta, 2.0);
-  vector<double> rstv;
-  vector<double> wtv(size,1.0/double(size));
-  for(int i=0;i<size;i++){
-    //double w2 = pow(se_beta*phi[i],2.0);
-    double w2 = pow(phi[i],2.0);
-    double val = 0.5*log(v2/(v2+w2)) + 0.5*z2*(w2/(v2+w2));
-    rstv.push_back(val/log(10));
-  }
+   if(se_beta == 0)
+	return 0;
+    //double phi[4] = {0.2,0.4,0.8, 1.6};
+    double phi[4] = {1,4,16,25};
+    int size = 4;
+    double z2 = pow((beta/se_beta), 2.0);
+    double v2 = pow(se_beta, 2.0);
+    vector<double> rstv;
+    vector<double> wtv(size,1.0/double(size));
+    for(int i=0;i<size;i++){
+       //double w2 = pow(se_beta*phi[i],2.0);
+      double w2 = pow(phi[i],2.0);
+      double val = 0.5*log(v2/(v2+w2)) + 0.5*z2*(w2/(v2+w2));
+      rstv.push_back(val/log(10));
+    }
 
-  return log10_weighted_sum(rstv,wtv);
+   return log10_weighted_sum(rstv,wtv);
 }
 
 
 double compute_log10_BF(double z_score){
-  
-  double kv[4] = {1,4,16,25};
-  int size = 4;
-  double z2 = pow(z_score, 2.0);
-  vector<double> rstv;
-  vector<double> wtv(size,1.0/double(size));
-  for(int i=0;i<size;i++){
-    //double w2 = pow(se_beta*phi[i],2.0);
-    //double w2 = pow(phi[i],2.0);
-    double val = 0.5*log(1/(1+kv[i])) + 0.5*z2*(kv[i]/(1+kv[i]));
-    rstv.push_back(val/log(10));
-  }
 
-  return log10_weighted_sum(rstv,wtv);
+    double kv[4] = {1,4,16,25};
+    int size = 4;
+    double z2 = pow(z_score, 2.0);
+    vector<double> rstv;
+    vector<double> wtv(size,1.0/double(size));
+    for(int i=0;i<size;i++){
+         double val = 0.5*log(1/(1+kv[i])) + 0.5*z2*(kv[i]/(1+kv[i]));
+	 rstv.push_back(val/log(10));
+    }
+				
+   return log10_weighted_sum(rstv,wtv);
 }
 
 
@@ -1513,10 +2012,33 @@ double log10_weighted_sum(vector<double> &vec, vector<double> &wts){
   return (max+log10(sum));
 }
 
+
+double log10_weighted_sum(vector<double> &vec, double *wts){
+
+
+  double max = vec[0];
+  for(size_t i=0;i<vec.size();i++){
+    if(vec[i]>max)
+      max = vec[i];
+  }
+  double sum = 0;
+  for(size_t i=0;i<vec.size();i++){
+    sum += wts[i]*pow(10, (vec[i]-max));
+  }
+
+  return (max+log10(sum));
+}
+ 
+
+
 bool rank_by_fdr (const Locus & loc1 , const Locus & loc2){
   return (loc1.fdr < loc2.fdr);
 }
  
+
+bool sort_by_BF(const SNP &snp1, const SNP &snp2){
+  return snp1.log10_BF > snp2.log10_BF;
+}
 
 
 
