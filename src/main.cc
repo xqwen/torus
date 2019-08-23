@@ -2,12 +2,13 @@
 #include <fstream>
 #include <sstream>
 
+#define LENGTH 2560
 
 
 void show_banner(){
 
   fprintf(stderr, "\n\nTORUS: QTL Discovery Utilizing Genomic Annotations\n\n");
-  fprintf(stderr, "Usage: torus -est|qtl|dump_prior  -d input_data.gz [-smap snp_map.gz] [-gmap gene_map.gz] [-annot annotation_file.gz] [--load_bf | --load_zval]\n\n");
+  fprintf(stderr, "Usage: torus -est|qtl  -d input_data.gz [-smap snp_map.gz] [-gmap gene_map.gz] [-annot annotation_file.gz] [--load_bf | --load_zval]\n\n");
   
 
 
@@ -22,12 +23,13 @@ int main(int argc, char **argv){
   //olist.push_back(0.1);
   //phlist.push_back(0.05);
 
-  char data_file[256];
-  char gmap_file[256];
-  char smap_file[256];
-  char annot_file[256];
-  char prior_dir[256];
-  char output_pip[256];
+  char data_file[LENGTH];
+  char gmap_file[LENGTH];
+  char smap_file[LENGTH];
+  char annot_file[LENGTH];
+  char prior_dir[LENGTH];
+  char output_pip[LENGTH];
+  char output_wv[LENGTH];
 
   int csize = -1;
   int gsize = -1;
@@ -37,11 +39,12 @@ int main(int argc, char **argv){
   int fastqtl_use_dtss = 1;
 
 
+  int grid_size = 0;
 
-  memset(data_file,0,256);
+  memset(data_file,0,LENGTH);
 
 
-  char init_file[256];
+  char init_file[LENGTH];
 
 
   int find_egene = 0;
@@ -50,26 +53,34 @@ int main(int argc, char **argv){
 
   double init_pi1 = 1e-3;
 
-  char ci_file[256];
-  memset(ci_file,0,256); 
-  memset(data_file,0,256); 
-  memset(gmap_file,0,256);
-  memset(smap_file,0,256);
-  memset(annot_file,0,256);
-  memset(init_file,0,256);
-  memset(prior_dir,0,256);
-  memset(output_pip,0,256);
+  double set_pi0 = -1;
+
+
+  char ci_file[LENGTH];
+  memset(ci_file,0,LENGTH); 
+  memset(data_file,0,LENGTH); 
+  memset(gmap_file,0,LENGTH);
+  memset(smap_file,0,LENGTH);
+  memset(annot_file,0,LENGTH);
+  memset(init_file,0,LENGTH);
+  memset(prior_dir,0,LENGTH);
+  memset(output_pip,0,LENGTH);
+  memset(output_wv,0,LENGTH);
 
   int force_logistic = 0;
   int prob_annot = 0;
   
   int data_format = 1;
-
+  int print_lead_snp = 0;
+  
   double EM_thresh = 0.05;
   double dist_bin_size = -1;
   double l1_lambda = 0;
   double l2_lambda = 0;
-  
+ 
+  int use_ash = 0;
+  double shrink_pi0 = 0;
+
   for(int i=1;i<argc;i++){
     
     if(strcmp(argv[i], "-d")==0 || strcmp(argv[i], "-data")==0){
@@ -123,7 +134,33 @@ int main(int argc, char **argv){
       continue;
     }
 
+ 
+   if(strcmp(argv[i], "-shrink_pi0")==0){
+      shrink_pi0 = atof(argv[++i]);
+      continue;
+    }
 
+
+   if(strcmp(argv[i], "-set_pi0") == 0){
+      set_pi0 = atof(argv[++i]);
+      if(set_pi0<=0 || set_pi0>=1){
+	   fprintf(stderr, "Invalid pi0 value: pi0 must be >0 and <1\n");
+	   exit(1);
+      }
+      continue;
+   }   
+    
+    
+    if(strcmp(argv[i], "-est_grid")==0 || strcmp(argv[i], "-gsize")==0  || strcmp(argv[i], "-grid")==0){
+      grid_size = atoi(argv[++i]);
+      continue;
+    }
+
+   if(strcmp(argv[i], "--ash")==0 || strcmp(argv[i], "--use_ash")==0){
+     use_ash = 1;
+     continue;
+   }
+    
     if(strcmp(argv[i], "--force_logistic")==0){
       force_logistic = 1;
       continue;
@@ -151,14 +188,13 @@ int main(int argc, char **argv){
       continue;
     }
 
+
     if(strcmp(argv[i], "--no_dtss") == 0) {
       fastqtl_use_dtss = 0;
       continue;
     }
     
     
-
-
 
     if(strcmp(argv[i], "-dist_bin_size") == 0){
       dist_bin_size = atof(argv[++i]);
@@ -176,7 +212,13 @@ int main(int argc, char **argv){
       find_egene = 1;
       continue;
     }
+    
+    if(strcmp(argv[i], "--print_lead_snp")==0 || strcmp(argv[i], "--print_lead_SNP")==0 ){
+      print_lead_snp = 1;
+      continue;
+    }
 
+    
     if(strcmp(argv[i], "-dump_prior")==0){
       strcpy(prior_dir, argv[++i]);
       continue;
@@ -184,6 +226,12 @@ int main(int argc, char **argv){
 
     if(strcmp(argv[i], "-dump_pip")==0){
       strcpy(output_pip, argv[++i]);
+      continue;
+    }
+
+
+    if(strcmp(argv[i], "-dump_wv")==0){
+      strcpy(output_wv, argv[++i]);
       continue;
     }
 
@@ -251,7 +299,22 @@ int main(int argc, char **argv){
   
   con.init_pi1 = init_pi1;
   con.print_avg = print_avg;
+  con.use_ash = use_ash;
+  con.shrink_pi0 = shrink_pi0;
 
+  if(set_pi0 > 0){
+    con.set_pi0 = set_pi0;
+    con.use_ash = 1;
+    con.shrink_pi0 = 1;
+  } 
+
+  if(grid_size >1){
+    
+    data_format = 5;
+
+  }
+
+  
   switch(data_format){
   case 1:
     con.load_data(data_file);
@@ -266,6 +329,9 @@ int main(int argc, char **argv){
     con.fastqtl_use_dtss = fastqtl_use_dtss;
     con.load_data_fastqtl(data_file);
     gmap_file[0]=smap_file[0] = 0;
+    break;
+  case 5:
+    con.load_data_BSLMM_BF(data_file, grid_size);
     break;
   default:
     con.load_data(data_file);
@@ -285,15 +351,24 @@ int main(int argc, char **argv){
   if(est)
     con.estimate();
   if(find_egene){
+    con.print_lead_snp = print_lead_snp;
     con.find_eGene(alpha);
   }
   if(strlen(prior_dir)>0){
     con.dump_prior(prior_dir);
   }
+
   if(strlen(output_pip)>0){
-    fprintf(stderr,"#-dump_pip output_pip file: %s \n",output_pip);
+    //fprintf(stderr,"#-dump_pip output_pip file: %s \n",output_pip);
     con.dump_pip(output_pip);
   }
+
+  if(strlen(output_wv)>0){
+    con.dump_wv(output_wv);
+  }
+
+  
+  
 }
 
 
