@@ -77,7 +77,10 @@ void controller::load_data(char *filename){
 	curr_loc_id = loc_id;
    
       }
-      
+        
+      if(t_val == 0)
+          t_val = 1e-8;
+
       se_beta = beta/t_val;
       SNP snp(snp_id, index_count);
 
